@@ -11,9 +11,10 @@ Tämä projektikurssi suoritettiin suomeksi, joten myös dokumentointi on tehty 
 ## Ominaisuudet
 
 * **Lokaali ja pilvipohjainen versio:** Llama 3 ja ChromaDB pyörivät täysin paikallisesti, OpenAI `gpt-4o-mini` ja Pinecone (tulossa) pilvipohjaisena.
-* **Monikielinen RAG (Cross-Lingual):** Tietokannan lähdeaineisto (Memory Alpha) on englanniksi, mutta käyttö on optimoitu suomeksi. Käyttäjä voi kysyä kysymyksiä ja tekoäly vastaa sujuvalla suomen kielellä hyödyntäen monikielistä upotusmallia.
-* **Kontekstitietoinen muisti (history-aware):** Tekoäly ymmärtää keskustelun historian. Käyttäjä voi kysyä jatkokysymyksiä (esim. *"Kuka hän oli?"*), ja järjestelmä osaa yhdistää sen aiempaan kontekstiin.
-* **Hallusinoinnin minimointi ja lähteiden listaus:** Vastauksen jälkeen chatbot kertoo, mistä tieto on löytynyt.
+* **Monikielinen RAG:** Tietokannan lähdeaineisto (Memory Alpha) on englanniksi, mutta käyttö on optimoitu suomeksi. Käyttäjä voi kysyä kysymyksiä ja tekoäly vastaa sujuvalla suomen kielellä hyödyntäen monikielisiä malleja.
+* **Lyhyet ja ytimekkäät vastaukset:** Chatbot ("Tähtilaivaston tietokone") vastaa kysymyksiin konemaisesti ja ytimekkäästi.
+* **Kontekstitietoinen muisti:** Tekoäly ymmärtää keskustelun historian. Käyttäjä voi kysyä jatkokysymyksiä (esim. *"Kuka hän oli?"*), ja järjestelmä osaa yhdistää sen aiempaan kontekstiin.
+* **Lähteiden listaus ja hallusinoinnin minimointi:** Vastauksen jälkeen chatbot kertoo, mistä tieto on löytynyt. Se ei keksi omia faktoja tai linkkejä. Jos tietoa ei löydy, se vastaa: "Tietoa ei löydy tietokannasta."
 * **Datan esikäsittely (Firecrawl ja regex):** Fandom-wikien raskas HTML-koodi on siivottu LLM-optimoituun Markdown-muotoon. Raakadata on käsitelty regex-lausekkeilla ja siitä on poistettu muotoilut, linkit ja sisällysluettelot.
 
 ## Käytetyt teknologiat
@@ -22,7 +23,7 @@ Tämä projektikurssi suoritettiin suomeksi, joten myös dokumentointi on tehty 
 * **Upotukset (embeddings):** Hugging Face (`paraphrase-multilingual-MiniLM-L12-v2`)
 * **Orkestrointi:** LangChain
 * **Vektoritietokanta:** ChromaDB (lokaali) tai Pinecone (pilvi)
-* **Kielimalli (LLM):** Ollama Llama 3 (lokaali) tai OpenAI `gpt-4o-mini` (pilvi)
+* **Kielimalli (LLM):** Ollama `Llama 3` (lokaali) tai OpenAI `gpt-4o-mini` (pilvi)
 * **Käyttöliittymä (frontend):** Streamlit
 
 ## Asennusohjeet

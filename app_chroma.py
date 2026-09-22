@@ -1,5 +1,5 @@
 import streamlit as st
-import warnings
+# import warnings
 import os
 
 from dotenv import load_dotenv
@@ -10,6 +10,9 @@ from langchain_classic.chains import create_retrieval_chain, create_history_awar
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
+from langchain_classic.retrievers import ContextualCompressionRetriever
+from langchain_classic.retrievers.document_compressors import CrossEncoderReranker
+from langchain_community.cross_encoders import HuggingFaceCrossEncoder
 
 # Jos käytetään Llama 3 -kielimallia:
 # from langchain_community.llms import Ollama
@@ -21,11 +24,12 @@ from langchain_openai import ChatOpenAI
 
 load_dotenv()
 
+
 # 1. SIVUN ASETUKSET
 
 st.set_page_config(page_title="Tähtilaivaston tietokone", layout="centered")
 st.title("Tähtilaivaston tietokone")
-st.caption("Kysy mitä tahansa Star Trek -sarjoista The Next Generation, Deep Space Nine ja Voyager. Tietokone etsii vastauksen tietokannasta ja kääntää sen suomeksi.")
+st.caption("Kysy mitä tahansa sarjasta Star Trek: The Next Generation. Tietokone etsii vastauksen tietokannasta ja kääntää sen suomeksi.")
 
 
 # 2. RAG-TAUSTAJÄRJESTELMÄN LATAUS
@@ -34,13 +38,28 @@ st.caption("Kysy mitä tahansa Star Trek -sarjoista The Next Generation, Deep Sp
 def load_rag_chain():
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
     vectorstore = Chroma(persist_directory="./chroma_db_free", embedding_function=embeddings)
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 15})
 
     # Jos käytetään Llama 3 -kielimallia:
     # llm = Ollama(model="llama3")
 
     # Jos käytetään OpenAI:n gpt-4o-mini -kielimallia (vaatii OpenAI:n maksullisen API-avaimen):
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+
+    # Haetaan 15 parasta osumaa vektoritietokannasta
+    base_retriever = vectorstore.as_retriever(search_kwargs={"k": 15})
+
+    # Ladataan lokaali Cross-Encoder -malli (monikielinen)
+    # Tämä ladataan muistiin vain kerran Streamlitin cachen ansiosta
+    model = HuggingFaceCrossEncoder(model_name="BAAI/bge-reranker-v2-m3")
+    
+    # top_n=4 tarkoittaa, että Re-ranker valitsee 15:stä palasesta 4 absoluuttisesti parasta
+    compressor = CrossEncoderReranker(model=model, top_n=4)
+
+    # Yhdistetään uudeksi hakuputkeksi
+    compression_retriever = ContextualCompressionRetriever(
+        base_compressor=compressor,
+        base_retriever=base_retriever
+    )
 
     # Historian ymmärtävä prompti (kääntää haun englanniksi)
     contextualize_q_system_prompt = (
@@ -58,7 +77,7 @@ def load_rag_chain():
     
     # Luodaan haku-ketju, joka on tietoinen historiasta
     history_aware_retriever = create_history_aware_retriever(
-        llm, retriever, contextualize_q_prompt
+        llm, compression_retriever, contextualize_q_prompt
     )
 
     # Varsinainen vastaus-prompti (sisältää myös historian)
@@ -110,7 +129,7 @@ if prompt := st.chat_input("Kysy tietokoneelta... (esim. Kuka oli tähtialus Ent
 
     # 1. Käännetään Streamlitin historia LangChainin formaattiin
     chat_history = []
-    for msg in st.session_state.messages:
+    for msg in st.session_state.messages[:-1]:
         if msg["role"] == "user":
             chat_history.append(HumanMessage(content=msg["content"]))
         elif msg["role"] == "assistant":
@@ -135,7 +154,7 @@ if prompt := st.chat_input("Kysy tietokoneelta... (esim. Kuka oli tähtialus Ent
             #     docs_used = chunk['context']
             #     print("\n=== DEBUG: TEKOÄLYLLE LÄHETETYT PALASET ===")
             #     for i, doc in enumerate(docs_used):
-            #         print(f"Pala {i+1}: {doc.page_content[:350]}...")
+            #         print(f"Pala {i+1}: {doc.page_content}...")
             #     print("===========================================\n")
         
         # 3. Kun striimaus on valmis, lisätään lähteet VAIN, jos tieto löytyi
