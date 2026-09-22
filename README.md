@@ -1,6 +1,8 @@
 # Vektoritietokannan ja monikielisen RAG (Retrieval-Augmented Generation) -putken rakentaminen
 
-Tämä on 4 opintopisteen (n. 108 tuntia) laajuinen korkeakouluprojekti. Projektin tavoitteena oli rakentaa vektoritietokanta, johon ladataan Wikipedia-tyyppisiä artikkeleita lyhyempinä palasina ja upotuksina, ja toteutetaan monikielinen RAG (Retrieval-Augmented Generation) -pohjainen chatbot, joka hakee vastaukset vektoritietokannasta.
+![Sovelluksen kuva](demo.png)
+
+Tämä on 4 opintopisteen (n. 108 tuntia) laajuinen korkeakouluprojekti. Projektin tavoitteena on rakentaa vektoritietokanta, johon ladataan Wikipedia-tyyppisiä artikkeleita lyhyempinä palasina ja upotuksina, ja toteutetaan monikielinen RAG (Retrieval-Augmented Generation) -pohjainen chatbot, joka hakee vastaukset vektoritietokannasta.
 
 Sovelluksen materiaalina käytettiin 90-luvun Star Trek -sarjoja The Next Generation, Deep Space Nine ja Voyager. Materiaali ladattiin Star Trek -universumille omistetulta Memory Alpha -sivustolta. Aiheen rajaamisen myötä hallusinoinnin testaus on helpompaa.
 
@@ -53,10 +55,18 @@ cd StarTrek-RAG
 python -m venv venv
 ```
 
-Aktivoi virtuaaliympäristö ja asenna riippuvuudet:
+Aktivoi virtuaaliympäristö:
 
-Windows: venv\Scripts\activate
-Mac/Linux: source venv/bin/activate
+Windows:
+```bash
+venv\Scripts\activate
+```
+
+Mac/Linux:
+```bash
+source venv/bin/activate
+```
+Asenna riippuvuudet:
 
 ```bash
 pip install -r requirements.txt
