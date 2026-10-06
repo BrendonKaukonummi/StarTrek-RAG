@@ -3,7 +3,7 @@ import time
 import re
 
 from langchain_community.document_loaders import FireCrawlLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 
@@ -59,31 +59,6 @@ urls = [
     "https://memory-alpha.fandom.com/wiki/Locutus_of_Borg",
     "https://memory-alpha.fandom.com/wiki/Hugh",
     "https://memory-alpha.fandom.com/wiki/James_Moriarty_(hologram)",
-
-    # Species:
-
-    "https://memory-alpha.fandom.com/wiki/Human",
-    "https://memory-alpha.fandom.com/wiki/Borg",
-    "https://memory-alpha.fandom.com/wiki/Klingon",
-    "https://memory-alpha.fandom.com/wiki/Romulan",
-    "https://memory-alpha.fandom.com/wiki/Ferengi",
-    "https://memory-alpha.fandom.com/wiki/Vulcan",
-    "https://memory-alpha.fandom.com/wiki/Cardassian",
-    "https://memory-alpha.fandom.com/wiki/Betazoid",
-    "https://memory-alpha.fandom.com/wiki/El-Aurian",
-    "https://memory-alpha.fandom.com/wiki/Bynar",
-    "https://memory-alpha.fandom.com/wiki/Bajoran",
-    "https://memory-alpha.fandom.com/wiki/The_Children_of_Tama",
-    "https://memory-alpha.fandom.com/wiki/J%27naii",
-
-    # Planets:
-
-    "https://memory-alpha.fandom.com/wiki/Earth",
-    "https://memory-alpha.fandom.com/wiki/Qo%27noS",
-    "https://memory-alpha.fandom.com/wiki/Ni%27Var",
-    "https://memory-alpha.fandom.com/wiki/Romulus",
-    "https://memory-alpha.fandom.com/wiki/Betazed",
-    "https://memory-alpha.fandom.com/wiki/Risa",
 
     # Other:
 
@@ -310,11 +285,16 @@ print("Loading articles with Firecrawl...")
 
 for url in urls:
     print(f"Fetching: {url}")
-    loader = FireCrawlLoader(url=url, mode="scrape")
-    docs = loader.load()
-    documents.extend(docs)
-    
-    time.sleep(2)
+
+    try:
+        loader = FireCrawlLoader(url=url, mode="scrape")
+        docs = loader.load()
+        documents.extend(docs)
+
+    except Exception as e:
+        print(e)
+
+    time.sleep(7)
 
 print(f"\nLoaded {len(documents)} articles successfully.")
 
@@ -349,12 +329,48 @@ for doc in documents:
 
 print("Data cleaned!")
 
-print("Chunking text...")
-text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=1000, 
-    chunk_overlap=200
-)
-chunks = text_splitter.split_documents(documents)
+# Jaetaan teksti Markdown-otsikoiden mukaan
+headers_to_split_on = [
+    ("#", "Header 1"),   # Pääotsikot
+    ("##", "Header 2"),  # Väliotsikot
+    ("###", "Header 3"), # Alaväliotsikot
+]
+markdown_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers_to_split_on)
+
+md_chunks = []
+for doc in documents:
+    # Markdown-splitter lukee tekstin ja erottelee otsikot
+    splits = markdown_splitter.split_text(doc.page_content)
+    
+    # Koska Firecrawlin metadata (esim. url, title) voi hukkua tässä,
+    # kopioidaan alkuperäinen metadata takaisin uusiin palasiin
+    for split in splits:
+        split.metadata.update(doc.metadata)
+        md_chunks.append(split)
+
+# Pilkotaan teksti
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+chunks = text_splitter.split_documents(md_chunks)
+
+# Rikastetaan teksti otsikoilla (Contextual Enrichment)
+for chunk in chunks:
+    # Haetaan metadatasta Firecrawlin löytämä artikkelin otsikko (jos on)
+    title = chunk.metadata.get('title', 'Unknown article')
+    
+    # Haetaan metadatasta Markdown-splitterin löytämät väliotsikot
+    h1 = chunk.metadata.get('Header 1', '')
+    h2 = chunk.metadata.get('Header 2', '')
+    h3 = chunk.metadata.get('Header 3', '')
+    
+    # Rakennetaan uusi "kontekstipuskuri", joka tulee tekstin alkuun
+    context_header = f"ARTICLE/EPISODE TITLE: {title}\n"
+    if h1: context_header += f"SECTION: {h1}\n"
+    if h2: context_header += f"SUBSECTION: {h2}\n"
+    if h3: context_header += f"SUBSUBSECTION: {h3}\n"
+    
+    # Yhdistetään konteksti ja alkuperäinen teksti
+    chunk.page_content = f"{context_header}\nCONTENT:\n{chunk.page_content}"
+
 print(f"Split to {len(chunks)} chunks.")
 
 print("\nLoading embedding model and saving to database...")

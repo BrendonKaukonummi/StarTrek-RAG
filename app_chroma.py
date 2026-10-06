@@ -10,8 +10,10 @@ from langchain_classic.chains import create_retrieval_chain, create_history_awar
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
-from langchain_classic.retrievers import ContextualCompressionRetriever
+from langchain_core.documents import Document
+from langchain_classic.retrievers import ContextualCompressionRetriever, EnsembleRetriever
 from langchain_classic.retrievers.document_compressors import CrossEncoderReranker
+from langchain_community.retrievers import BM25Retriever
 from langchain_community.cross_encoders import HuggingFaceCrossEncoder
 
 # Jos käytetään Llama 3 -kielimallia:
@@ -35,27 +37,55 @@ st.caption("Kysy mitä tahansa sarjasta Star Trek: The Next Generation. Tietokon
 # 2. RAG-TAUSTAJÄRJESTELMÄN LATAUS
 
 @st.cache_resource(show_spinner=False)
-def load_rag_chain():
+def get_vectorstore():
+    # 1. Alustetaan embedding-malli ja avataan lokaali Chroma-tietokanta
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
-    vectorstore = Chroma(persist_directory="./chroma_db_free", embedding_function=embeddings)
+    return Chroma(persist_directory="./chroma_db_free", embedding_function=embeddings)
+
+@st.cache_resource(show_spinner="Rakennetaan hybridihakua (Chroma + BM25)...")
+def get_ensemble_retriever():
+    # 1. Haetaan lokaali tietokanta ja asetetaan vektorihaku
+    vs = get_vectorstore()
+    chroma_retriever = vs.as_retriever(search_kwargs={"k": 20})
+    
+    # 2. Luetaan kaikki data Chromasta BM25-avainsanahakua varten
+    db_data = vs.get()
+    docs = []
+    for i in range(len(db_data['ids'])):
+        docs.append(Document(
+            page_content=db_data['documents'][i], 
+            metadata=db_data['metadatas'][i] if db_data['metadatas'] else {}
+        ))
+        
+    bm25_retriever = BM25Retriever.from_documents(docs)
+    bm25_retriever.k = 20
+    
+    # 3. Yhdistetään vektorihaku ja avainsanahaku (50/50 painotus)
+    ensemble_retriever = EnsembleRetriever(
+        retrievers=[bm25_retriever, chroma_retriever],
+        weights=[0.5, 0.5]
+    )
+    
+    return ensemble_retriever
+
+@st.cache_resource(show_spinner=False)
+def load_rag_chain():
+    # 1. Haetaan hybridihaku pelkän vektorien sijaan
+    base_retriever = get_ensemble_retriever()
 
     # Jos käytetään Llama 3 -kielimallia:
     # llm = Ollama(model="llama3")
-
-    # Jos käytetään OpenAI:n gpt-4o-mini -kielimallia (vaatii OpenAI:n maksullisen API-avaimen):
+    
+    # Jos käytetään OpenAI:n gpt-4o-mini -kielimallia:
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-    # Haetaan 15 parasta osumaa vektoritietokannasta
-    base_retriever = vectorstore.as_retriever(search_kwargs={"k": 15})
-
-    # Ladataan lokaali Cross-Encoder -malli (monikielinen)
-    # Tämä ladataan muistiin vain kerran Streamlitin cachen ansiosta
+    # 2. Ladataan lokaali Cross-Encoder -malli (monikielinen)
     model = HuggingFaceCrossEncoder(model_name="BAAI/bge-reranker-v2-m3")
     
-    # top_n=4 tarkoittaa, että Re-ranker valitsee 15:stä palasesta 4 absoluuttisesti parasta
+    # top_n=4 tarkoittaa, että Re-ranker valitsee 20:stä hybridiosumasta 4 absoluuttisesti parasta
     compressor = CrossEncoderReranker(model=model, top_n=4)
 
-    # Yhdistetään uudeksi hakuputkeksi
+    # 3. Yhdistetään hybridihaku ja reranker uudeksi hakuputkeksi
     compression_retriever = ContextualCompressionRetriever(
         base_compressor=compressor,
         base_retriever=base_retriever
@@ -64,10 +94,12 @@ def load_rag_chain():
     # Historian ymmärtävä prompti (kääntää haun englanniksi)
     contextualize_q_system_prompt = (
         "Olet tekoäly, jonka tehtävänä on luoda hakulausekkeita englanninkieliseen tietokantaan. "
-        "Ottaen huomioon chathistorian ja viimeisimmän käyttäjän kysymyksen, "
+        "Ottaen huomioon chathistorian ja käyttäjän viimeisimmän kysymyksen, "
         "muotoile kysymys uudelleen itsenäiseksi, tarkaksi hakukysymykseksi. "
         "TÄRKEÄÄ: Käännä tämä hakukysymys AINA ENGLANNIKSI, koska tietokannan data on englanniksi. "
-        "Tämä parantaa hakuosumia. ÄLÄ vastaa kysymykseen, vaan palauta pelkkä englanninkielinen hakulause."
+        "Tämä parantaa hakuosumia. ÄLÄ vastaa kysymykseen, vaan palauta pelkkä englanninkielinen hakulause. "
+        "Jos keskusteluhistoriassa viitataan johonkin henkilöön tai asiaan pronominilla (esim. hän, se), "
+        "korvaa pronomini oikealla nimellä historiasta."
     )
     contextualize_q_prompt = ChatPromptTemplate.from_messages([
         ("system", contextualize_q_system_prompt),
@@ -83,14 +115,14 @@ def load_rag_chain():
     # Varsinainen vastaus-prompti (sisältää myös historian)
     qa_system_prompt = (
         "Olet Tähtilaivaston tietokoneen älykäyttöliittymä. Toimit konemaisesti ja ytimekkäästi.\n\n"
-        "Jos annetussa kontekstissa ei ole tietoa, jonka avulla kysymykseen voi vastata, "
-        "sinun on vastattava: 'Tietoa ei löydy tietokannasta.' Älä yritä päätellä, arvailla tai keksiä vastausta.\n\n"
+        "TÄRKEIN SÄÄNTÖ: Jos annetussa kontekstissa ei ole tietoa, jonka avulla kysymykseen voi vastata, "
+        "sinun on vastattava: 'Tietoa ei löydy tietokannasta.' Älä keksi omia faktoja.\n\n"
         "Muut säännöt:\n"
+        "- Älä koskaan käytä omaa ulkopuolista tietoasi vastauksen keksimiseen.\n"
+        "- Älä koskaan tervehdi tai esittele itseäsi.\n"
+        "- Älä koskaan keksi omia linkkejä.\n"
         "- Vastaa samalla kielellä kuin käyttäjän kysymys.\n"
         "- Jos vastaat suomeksi, käännä Star Trek -termit sujuvasti suomeksi (esim. warp drive = poimuajo).\n"
-        "- Älä käytä omaa ulkopuolista tietoasi vastauksen keksimiseen.\n"
-        "- Älä koskaan tervehdi tai esittele itseäsi.\n"
-        "- Älä koskaan keksi omia linkkejä.\n\n"
         "Konteksti:\n{context}"
     )
     qa_prompt = ChatPromptTemplate.from_messages([
