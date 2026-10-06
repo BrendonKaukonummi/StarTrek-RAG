@@ -2,7 +2,7 @@
 
 ![Sovelluksen kuva](demo_tng.png)
 
-Tämä on 4 opintopisteen (n. 108 tuntia) laajuinen korkeakouluprojekti. Projektin tavoitteena oli rakentaa vektoritietokanta, johon ladataan Wikipedia-tyyppisiä artikkeleita lyhyempinä palasina ja upotuksina, ja toteutetaan monikielinen RAG (Retrieval-Augmented Generation) -pohjainen chatbot, joka hakee vastaukset tietokannasta.
+Tämä on 4 opintopisteen (n. 108 tuntia) laajuinen korkeakouluprojekti. Projektin tarkoituksena oli rakentaa vektoritietokanta, RAG-arkkitehtuuri (Retrieval-Augmented Generation) ja yksinkertainen visuaalinen käyttöliittymä, jonka kautta käyttäjä voi kysyä kysymyksiä monikielisen kielimallin avulla. 
 
 Projektin materiaalina käytettiin tv-sarjaa Star Trek: The Next Generation. Materiaali ladattiin Star Trek -universumille omistetulta Memory Alpha -sivustolta. Aiheen rajaamisen myötä hallusinoinnin testaus oli helpompaa.
 
@@ -12,12 +12,13 @@ Tämä projektikurssi suoritettiin suomeksi, joten myös dokumentointi on tehty 
 
 ## Ominaisuudet
 
-* **Lokaali ja pilvipohjainen versio:** Llama 3 ja ChromaDB pyörivät täysin paikallisesti, OpenAI `gpt-4o-mini` ja Pinecone pilvipohjaisena.
+* **Lokaali ja pilvipohjainen versio:** Llama 3 ja ChromaDB pyörivät täysin lokaalisti, gpt-4o-mini ja Pinecone pilvipohjaisena.
 * **Monikielinen RAG:** Tietokannan lähdeaineisto (Memory Alpha) on englanniksi, mutta käyttö on optimoitu suomeksi. Käyttäjä voi kysyä kysymyksiä ja tekoäly vastaa sujuvalla suomen kielellä hyödyntäen monikielisiä malleja.
 * **Lyhyet ja ytimekkäät vastaukset:** Chatbot ("Tähtilaivaston tietokone") vastaa kysymyksiin konemaisesti ja ytimekkäästi.
 * **Kontekstitietoinen muisti:** Tekoäly ymmärtää keskustelun historian. Käyttäjä voi kysyä jatkokysymyksiä (esim. *"Kuka hän oli?"*), ja järjestelmä osaa yhdistää sen aiempaan kontekstiin.
 * **Lähteiden listaus ja hallusinoinnin minimointi:** Vastauksen jälkeen chatbot kertoo, mistä tieto on löytynyt. Se ei keksi omia faktoja tai linkkejä. Jos tietoa ei löydy, se vastaa: "Tietoa ei löydy tietokannasta."
 * **Cross-Encoder Re-ranker:** Hakee ensin isolla haravalla (esim. k=20) potentiaaliset osumat, jonka jälkeen tulokset järjestetään uudelleen semanttisen merkityksen perusteella ja kielimallille lähetetään niistä 4 absoluuttisesti parasta.
+* **Hybridihaku (ChromaDB):** Tietokannasta löydetään parhaat osumat yhdistellen vektorihakua ja BM25-avainsanahakua.
 * **Datan esikäsittely (Firecrawl ja regex):** Fandom-wikien raskas HTML-koodi on siivottu LLM-optimoituun Markdown-muotoon. Raakadata on käsitelty regex-lausekkeilla ja siitä on poistettu muotoilut, linkit ja sisällysluettelot.
 
 ## Käytetyt teknologiat
@@ -25,8 +26,8 @@ Tämä projektikurssi suoritettiin suomeksi, joten myös dokumentointi on tehty 
 * **Datan keräys (ingestion):** Firecrawl API
 * **Upotukset (embeddings):** Hugging Face (`paraphrase-multilingual-MiniLM-L12-v2`)
 * **Orkestrointi:** LangChain
-* **Vektoritietokanta:** ChromaDB (lokaali) tai Pinecone (pilvi)
-* **Kielimalli (LLM):** Ollama `Llama 3` (lokaali) tai OpenAI `gpt-4o-mini` (pilvi)
+* **Vektoritietokanta:** ChromaDB (lokaali) ja Pinecone (pilvi)
+* **Kielimalli (LLM):** Ollama `Llama 3` (lokaali) ja OpenAI `gpt-4o-mini` (pilvi)
 * **Re-Ranker (Cross-Encoder):** BAAI (`bge-reranker-v2-m3`)
 * **Käyttöliittymä (frontend):** Streamlit
 
@@ -126,7 +127,6 @@ Tässä projektissa opittiin:
 
 ## To Do:
 
-* Päivitä README
 * Päivitä ja testaa requirements.txt
 
 Kehittäjä: Brendon Kaukonummi - 2026
