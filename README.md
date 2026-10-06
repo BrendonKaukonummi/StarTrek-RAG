@@ -1,22 +1,23 @@
 # Vektoritietokannan ja monikielisen RAG (Retrieval-Augmented Generation) -putken rakentaminen
 
-![Sovelluksen kuva](demo.png)
+![Sovelluksen kuva](demo_tng.png)
 
-Tämä on 4 opintopisteen (n. 108 tuntia) laajuinen korkeakouluprojekti. Projektin tavoitteena on rakentaa vektoritietokanta, johon ladataan Wikipedia-tyyppisiä artikkeleita lyhyempinä palasina ja upotuksina, ja toteutetaan monikielinen RAG (Retrieval-Augmented Generation) -pohjainen chatbot, joka hakee vastaukset vektoritietokannasta.
+Tämä on 4 opintopisteen (n. 108 tuntia) laajuinen korkeakouluprojekti. Projektin tavoitteena oli rakentaa vektoritietokanta, johon ladataan Wikipedia-tyyppisiä artikkeleita lyhyempinä palasina ja upotuksina, ja toteutetaan monikielinen RAG (Retrieval-Augmented Generation) -pohjainen chatbot, joka hakee vastaukset tietokannasta.
 
-Sovelluksen materiaalina käytettiin 90-luvun Star Trek -sarjoja The Next Generation, Deep Space Nine ja Voyager. Materiaali ladattiin Star Trek -universumille omistetulta Memory Alpha -sivustolta. Aiheen rajaamisen myötä hallusinoinnin testaus on helpompaa.
+Projektin materiaalina käytettiin tv-sarjaa Star Trek: The Next Generation. Materiaali ladattiin Star Trek -universumille omistetulta Memory Alpha -sivustolta. Aiheen rajaamisen myötä hallusinoinnin testaus oli helpompaa.
 
-Projektia testattiin ensin täysin lokaalisti omalla tietokoneella käyttäen ChromaDB-tietokantaa, Hugging Face -upotusmallia ja Llama 3 -kielimallia. Myöhemmin vaihdettiin OpenAI:n maksulliseen kielimalliin ja testataan myös Pinecone-tietokantaa. Tavoitteena on saada kokemusta lokaalin kehityksen lisäksi myös tuotantotason pilviratkaisuista.
+Projektia testattiin ensin täysin lokaalisti omalla tietokoneella käyttäen ChromaDB-tietokantaa, Hugging Face -upotusmallia ja Llama 3 -kielimallia. Myöhemmin vaihdettiin OpenAI:n maksulliseen kielimalliin ja otettiin käyttöön Pinecone-tietokanta (ilmainen versio). Tavoitteena oli saada kokemusta lokaalin kehityksen lisäksi myös tuotantotason pilviratkaisuista.
 
 Tämä projektikurssi suoritettiin suomeksi, joten myös dokumentointi on tehty suomeksi.
 
 ## Ominaisuudet
 
-* **Lokaali ja pilvipohjainen versio:** Llama 3 ja ChromaDB pyörivät täysin paikallisesti, OpenAI `gpt-4o-mini` ja Pinecone (tulossa) pilvipohjaisena.
+* **Lokaali ja pilvipohjainen versio:** Llama 3 ja ChromaDB pyörivät täysin paikallisesti, OpenAI `gpt-4o-mini` ja Pinecone pilvipohjaisena.
 * **Monikielinen RAG:** Tietokannan lähdeaineisto (Memory Alpha) on englanniksi, mutta käyttö on optimoitu suomeksi. Käyttäjä voi kysyä kysymyksiä ja tekoäly vastaa sujuvalla suomen kielellä hyödyntäen monikielisiä malleja.
 * **Lyhyet ja ytimekkäät vastaukset:** Chatbot ("Tähtilaivaston tietokone") vastaa kysymyksiin konemaisesti ja ytimekkäästi.
 * **Kontekstitietoinen muisti:** Tekoäly ymmärtää keskustelun historian. Käyttäjä voi kysyä jatkokysymyksiä (esim. *"Kuka hän oli?"*), ja järjestelmä osaa yhdistää sen aiempaan kontekstiin.
 * **Lähteiden listaus ja hallusinoinnin minimointi:** Vastauksen jälkeen chatbot kertoo, mistä tieto on löytynyt. Se ei keksi omia faktoja tai linkkejä. Jos tietoa ei löydy, se vastaa: "Tietoa ei löydy tietokannasta."
+* **Cross-Encoder Re-ranker:** Hakee ensin isolla haravalla (esim. k=20) potentiaaliset osumat, jonka jälkeen tulokset järjestetään uudelleen semanttisen merkityksen perusteella ja kielimallille lähetetään niistä 4 absoluuttisesti parasta.
 * **Datan esikäsittely (Firecrawl ja regex):** Fandom-wikien raskas HTML-koodi on siivottu LLM-optimoituun Markdown-muotoon. Raakadata on käsitelty regex-lausekkeilla ja siitä on poistettu muotoilut, linkit ja sisällysluettelot.
 
 ## Käytetyt teknologiat
@@ -26,6 +27,7 @@ Tämä projektikurssi suoritettiin suomeksi, joten myös dokumentointi on tehty 
 * **Orkestrointi:** LangChain
 * **Vektoritietokanta:** ChromaDB (lokaali) tai Pinecone (pilvi)
 * **Kielimalli (LLM):** Ollama `Llama 3` (lokaali) tai OpenAI `gpt-4o-mini` (pilvi)
+* **Re-Ranker (Cross-Encoder):** BAAI (`bge-reranker-v2-m3`)
 * **Käyttöliittymä (frontend):** Streamlit
 
 ## Asennusohjeet
@@ -78,6 +80,7 @@ Luo projektin juureen tiedosto nimeltä .env ja lisää avaimet:
 ```bash
 FIRECRAWL_API_KEY=your_firecrawl_api_key_here
 OPENAI_API_KEY=your_openai_api_key_here
+PINECONE_API_KEY=your_pinecone_api_key_here
 ```
 
 ## Datan lataus ja käyttö
@@ -85,15 +88,27 @@ OPENAI_API_KEY=your_openai_api_key_here
 ### Vaihe 1: Datan lataus, siivous ja vektorointi
 Hae artikkelit Memory Alphasta, aja datan siivousputki (regex) ja tallenna vektorit tietokantaan:
 
+ChromaDB:
 ```bash
-python chunking.py
+python chunking_chroma.py
+```
+
+Pinecone:
+```bash
+python chunking_pinecone.py
 ```
 
 ### Vaihe 2: Sovelluksen käynnistys
 Kun tietokanta on valmis, käynnistä chat-käyttöliittymä:
 
+ChromaDB:
 ```bash
-streamlit run app.py
+streamlit run app_chroma.py
+```
+
+Pinecone:
+```bash
+streamlit run app_pinecone.py
 ```
 
 Sovellus aukeaa selaimeesi osoitteeseen http://localhost:8501.
@@ -102,7 +117,7 @@ Sovellus aukeaa selaimeesi osoitteeseen http://localhost:8501.
 
 Tässä projektissa opittiin:
 
-* Epärakenteellisen datan ryömintä (crawling) ja puhdistaminen regex-lausekkeilla informaatiotiheyden parantamiseksi
+* Epärakenteellisen datan kerääminen (scraping) ja puhdistaminen regex-lausekkeilla informaatiotiheyden parantamiseksi
 * API-integraatiot
 * LangChain-ketjujen rakentaminen
 * Vektoritietokantojen toimintalogiikka ja semanttinen haku
@@ -111,9 +126,7 @@ Tässä projektissa opittiin:
 
 ## To Do:
 
-* lisää uusia artikkeleita tietokantaan
-* Pinecone-tietokannan käyttöönotto
-* requirements.txt -tiedoston päivitys/testaus
-* promptin muokkaaminen/testaus (jos hallusinointia esiintyy tai tietoa ei löydy tarpeeksi hyvin)
+* Päivitä README
+* Päivitä ja testaa requirements.txt
 
 Kehittäjä: Brendon Kaukonummi - 2026
